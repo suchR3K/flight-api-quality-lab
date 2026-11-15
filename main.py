@@ -1,5 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from database import get_db
 
 
 class FlightCreate(BaseModel):
@@ -39,15 +41,6 @@ class FlightCreate(BaseModel):
 
 app = FastAPI()
 
-flights = {
-    1: {
-        "id": 1,
-        "flight_number": "LO123",
-        "origin": "WAW",
-        "destination": "LHR",
-    }
-}
-
 
 @app.get("/health")
 def health():
@@ -55,25 +48,44 @@ def health():
 
 
 @app.get("/flights/{flight_id}")
-def get_flight(flight_id: int):
-    if flight_id not in flights:
+def get_flight(flight_id: int, connection=Depends(get_db)):
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, flight_number, origin, destination
+            FROM flights
+            WHERE id = %s;
+            """,
+            (flight_id,),
+        )
+        flight = cursor.fetchone()
+
+    if flight is None:
         raise HTTPException(
             status_code=404,
             detail="Flight not found",
         )
 
-    return flights[flight_id]
+    return flight
 
 
 @app.post("/flights", status_code=201)
-def create_flight(flight: FlightCreate):
-    new_id = max(flights, default=0) + 1
+def create_flight(flight: FlightCreate, connection=Depends(get_db)):
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO flights (
+                flight_number, origin, destination
+            )
+            VALUES (%s, %s, %s)
+            RETURNING id, flight_number, origin, destination;
+            """,
+            (
+                flight.flight_number,
+                flight.origin,
+                flight.destination,
+            ),
+        )
+        created_flight = cursor.fetchone()
 
-    new_flight = {
-        "id": new_id,
-        **flight.model_dump(),
-    }
-
-    flights[new_id] = new_flight
-
-    return new_flight
+    return created_flight
