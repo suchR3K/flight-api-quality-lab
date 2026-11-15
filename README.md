@@ -513,6 +513,10 @@ These documents are not automatically updated by CI.
 
 ## Troubleshooting
 
+A documented investigation of a local port conflict is available here:
+
+[API container port conflict](docs/troubleshooting/port-8000-conflict.md)
+
 ### Port 8000 is already in use
 
 A local Uvicorn process may already be listening on that port.
