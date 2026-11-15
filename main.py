@@ -51,7 +51,7 @@ flights = {
 
 @app.get("/health")
 def health():
-    return {"status": "broken"}
+    return {"status": "ok"}
 
 
 @app.get("/flights/{flight_id}")
