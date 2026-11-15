@@ -1,0 +1,12 @@
+.git/
+.venv/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.pytest_cache/
+reports/
+*.swp
+check_database.py
+check_test_database.py

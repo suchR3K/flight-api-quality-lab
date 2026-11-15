@@ -66,6 +66,9 @@ jobs:
           mkdir -p reports
           python -m pytest -v --junitxml=reports/junit.xml
 
+      - name: Build API image
+        run: docker build -t flight-api:ci .
+
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v7
