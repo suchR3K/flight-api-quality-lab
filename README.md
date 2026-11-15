@@ -2,8 +2,8 @@
 
 An educational API testing project built with Python, FastAPI and PostgreSQL.
 
-The project demonstrates API validation, automated integration tests,
-manual testing in Postman and continuous integration with GitHub Actions.
+The project demonstrates input validation, automated integration tests,
+manual testing in Postman, containerization and continuous integration.
 
 All flight data is fictional. This project is not affiliated with an airline.
 
@@ -11,13 +11,13 @@ All flight data is fictional. This project is not affiliated with an airline.
 
 - Check whether the API is responding.
 - Retrieve a flight by ID.
-- Create and persist a flight in PostgreSQL.
-- Reject missing required fields and blank flight numbers.
+- Create and persist flights in PostgreSQL.
+- Validate required fields and airport codes.
+- Reject blank flight numbers and identical departure/arrival airports.
 - Trim whitespace around flight numbers.
-- Validate airport codes as exactly three uppercase letters from A to Z.
-- Reject identical departure and arrival airports.
 - Run automated tests against a separate test database.
 - Generate downloadable JUnit XML reports in GitHub Actions.
+- Run the API and database together using Docker Compose.
 
 ## Technologies
 
@@ -26,41 +26,60 @@ All flight data is fictional. This project is not affiliated with an airline.
 - PostgreSQL 17 and Psycopg
 - pytest and FastAPI TestClient
 - Postman
-- Docker Compose
+- Docker and Docker Compose
 - Git and GitHub Actions
 
 ## Architecture
 
+### Application
+
 ```text
 Postman / HTTP client
         |
+        | localhost:8000
         v
-FastAPI application
+FastAPI container
+        |
+        | db:5432
+        v
+PostgreSQL container
         |
         v
-PostgreSQL: flight_lab
+Named Docker volume
+```
 
+The API can also run directly in a local Python environment while
+PostgreSQL runs in Docker.
+
+### Automated tests
+
+```text
 pytest + TestClient
         |
         v
-FastAPI with a test database dependency override
+FastAPI with a database dependency override
         |
         v
 PostgreSQL: flight_lab_test
 ```
 
-The API runs locally in Python. PostgreSQL runs in Docker.
-The API itself is not yet containerized.
+- `flight_lab` stores data used by the application and manual tests.
+- `flight_lab_test` is reserved for automated tests.
 
 ## Requirements
 
-- Python 3.13 with pip and venv support
 - Git
 - Docker Engine and Docker Compose
+- Python 3.13 with pip and venv support for local pytest execution
 - Postman, optionally, for running the collection
 
 The commands below are intended for Linux.
-Run them from the project directory unless stated otherwise.
+
+When using an Ubuntu virtual machine, run these commands inside Ubuntu.
+Run Postman inside the same VM when using the localhost addresses below.
+
+If your Docker installation requires administrator privileges, prefix
+Docker commands with `sudo`.
 
 ## First-time setup
 
@@ -71,22 +90,17 @@ git clone https://github.com/suchR3K/flight-api-quality-lab.git
 cd flight-api-quality-lab
 ```
 
-### 2. Create a Python environment
+Run subsequent commands from this directory.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
+### 2. Configure the database
 
-### 3. Configure the database connection
+Create a local configuration file:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and replace the example password with a local development
-password. Keep the following database names and user for these instructions:
+Edit `.env`:
 
 ```dotenv
 POSTGRES_HOST=127.0.0.1
@@ -96,9 +110,18 @@ POSTGRES_USER=flight_app
 POSTGRES_PASSWORD=replace_with_your_local_password
 ```
 
-Do not commit `.env`. It is excluded by `.gitignore`.
+Replace the example password before initializing the database.
 
-### 4. Start PostgreSQL
+Keep the database name and username shown above to use the commands
+in this guide without modification.
+
+Do not commit `.env`. It is excluded by `.gitignore` and `.dockerignore`.
+
+For an existing installation, do not overwrite a working `.env`.
+Changing this file does not change the password of an already initialized
+PostgreSQL user.
+
+### 3. Start PostgreSQL
 
 ```bash
 docker compose up -d db
@@ -107,46 +130,158 @@ docker compose ps
 
 Wait until the database reports `healthy`.
 
-The database port is bound to `127.0.0.1` on the Docker host.
-Database files are stored in a named Docker volume.
+The database is available locally on port 5432.
+Its data is stored in the named volume `postgres_data`, managed by Compose.
 
-### 5. Create the application table
+### 4. Create the application table
 
 ```bash
 docker compose exec -T db psql -U flight_app -d flight_lab -v ON_ERROR_STOP=1 < sql/001_create_flights.sql
 ```
 
-### 6. Create the test database and table
+### 5. Create the test database and table
 
 ```bash
 docker compose exec db createdb -U flight_app flight_lab_test
 docker compose exec -T db psql -U flight_app -d flight_lab_test -v ON_ERROR_STOP=1 < sql/001_create_flights.sql
 ```
 
-Run the database and table creation commands only once per new database.
-Repeated execution will report that the database or table already exists.
+Database and table creation should be performed only once per new database.
+Repeated execution reports that the database or table already exists.
 
-The application database starts empty. Create flights through the API.
-The test fixture prepares its own example flight in the test database.
+The application database starts empty.
+Create application data through the API.
 
-## Run the application
+Automated tests prepare their own data in `flight_lab_test`.
+
+## Run with Docker Compose
+
+After completing the database setup:
 
 ```bash
+docker compose up -d --build
+docker compose ps
+```
+
+Expected service states:
+
+- `db`: running and healthy
+- `api`: running
+
+The API container waits for the database health check before starting.
+This check does not create the database tables.
+
+Available addresses:
+
+- Health check: http://127.0.0.1:8000/health
+- Interactive documentation: http://127.0.0.1:8000/docs
+
+Check the response:
+
+```bash
+curl -i http://127.0.0.1:8000/health
+```
+
+Expected status: `200 OK`.
+
+Expected body:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+The health endpoint checks the API response, not database availability.
+Use flight creation and retrieval to verify database connectivity.
+
+### Container configuration
+
+- The API runs as `appuser`, with UID 10001.
+- Database settings are passed through environment variables.
+- The local `.env` file is not copied into the API image.
+- The API connects to PostgreSQL using hostname `db`.
+- API and database ports are bound to localhost on the Docker host.
+
+Check the container user:
+
+```bash
+docker compose exec api id
+```
+
+### View logs
+
+```bash
+docker compose logs --tail=50 api
+docker compose logs --tail=50 db
+```
+
+### Rebuild after code changes
+
+```bash
+docker compose up -d --build api
+```
+
+The image contains a copy of the application code.
+Editing local Python files does not automatically update a running container.
+
+### Recreate the API container
+
+```bash
+docker compose up -d --force-recreate --no-deps api
+```
+
+This replaces the API container while leaving the database service alone.
+Previously saved flights remain in PostgreSQL.
+
+### Stop and restart
+
+Stop both services:
+
+```bash
+docker compose stop
+```
+
+Start them again:
+
+```bash
+docker compose up -d
+```
+
+Stopping services does not delete the database volume.
+Do not use `docker compose down -v` unless you intend to delete its data.
+
+## Alternative: run the API directly in Python
+
+This mode uses a local Python process and the database container.
+
+Create and activate the environment:
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Stop the containerized API to free port 8000:
+
+```bash
+docker compose stop api
+```
+
+Start PostgreSQL and the local API:
+
+```bash
 docker compose up -d db
 python -m uvicorn main:app --reload
 ```
 
-- Health check: http://127.0.0.1:8000/health
-- Interactive API documentation: http://127.0.0.1:8000/docs
+Use Ctrl+C to stop the local API.
 
-Use Ctrl+C to stop the API.
+The local process uses `POSTGRES_HOST=127.0.0.1` from `.env`.
+The containerized API overrides that setting with `POSTGRES_HOST=db`.
 
-The `--reload` option is intended for local development.
-Saved flights remain in PostgreSQL after the API restarts.
-
-If the API runs in a virtual machine, `127.0.0.1` refers to that VM.
-Run Postman inside the same VM for the local addresses above to work.
+Do not run both API variants on port 8000 at the same time.
 
 ## API endpoints
 
@@ -158,7 +293,7 @@ Run Postman inside the same VM for the local addresses above to work.
 
 ### Create a flight
 
-Example request body for `POST /flights`:
+Request body for `POST /flights`:
 
 ```json
 {
@@ -179,34 +314,55 @@ Example response:
 }
 ```
 
-The database generates the ID, so its value may differ.
+The database generates the ID. Its value may differ.
 IDs are not guaranteed to be consecutive.
 
 ### Validation rules
 
 - `flight_number`, `origin` and `destination` are required strings.
-- Leading and trailing whitespace is removed from `flight_number`.
+- Leading and trailing whitespace is removed from flight numbers.
 - A blank flight number is rejected.
 - Airport codes must contain exactly three uppercase ASCII letters.
 - Airport codes with surrounding spaces are rejected.
-- `origin` and `destination` must be different.
+- Departure and arrival airports must be different.
 
 Airport codes are checked for format, not against a real airport directory.
 
+Database constraints also reject null fields, space-only flight numbers,
+invalid airport code formats and identical airports.
+
 ## Run automated tests
 
-Start PostgreSQL and activate the Python environment:
+Tests run locally through Python and connect to the test database.
+
+If the Python environment has not been created yet:
+
+```bash
+python3 -m venv .venv
+```
+
+Activate it and install dependencies:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Start PostgreSQL and wait until it is healthy:
 
 ```bash
 docker compose up -d db
-source .venv/bin/activate
+docker compose ps
 ```
 
-Run the tests:
+Run tests:
 
 ```bash
 python -m pytest -v
 ```
+
+Uvicorn does not need to be running.
+FastAPI TestClient communicates directly with the application.
 
 The current suite contains 30 test cases, including parameterized cases.
 
@@ -234,16 +390,16 @@ Before each test, a fixture:
 1. Checks the actual database name.
 2. Clears the flights table and resets its identity generator.
 3. Inserts a known example flight.
-4. Provides the connection to the test and API dependency override.
+4. Provides the same connection to the test and API dependency override.
 5. Rolls back the transaction after the test.
 
 Tests and endpoints must not explicitly commit the shared test connection,
-because this would prevent the fixture from rolling back those changes.
+because that would prevent the fixture from rolling back those changes.
 
-The regular application database, `flight_lab`, is separate from test data.
+Application data in `flight_lab` is separate from automated test data.
 The current fixture is designed for sequential test execution.
 
-### Generate a JUnit XML report
+### JUnit XML report
 
 ```bash
 mkdir -p reports
@@ -258,23 +414,25 @@ The workflow runs on pushes and pull requests.
 
 It:
 
-1. Starts a PostgreSQL service with a temporary test database.
+1. Starts PostgreSQL with a temporary test database.
 2. Checks out the repository.
 3. Sets up Python 3.13.
-4. Installs dependencies from `requirements.txt`.
+4. Installs dependencies.
 5. Creates the test database schema.
 6. Runs pytest and generates a JUnit XML report.
 7. Attempts to upload the report even if tests fail.
 
-Reports are available as the `pytest-results` artifact and retained
-for 14 days.
+The `pytest-results` artifact is retained for 14 days.
 
-A failed test makes the workflow fail. Uploading a report does not
-change that result.
+A failed test makes the workflow fail.
+Uploading the report does not change that result.
+
+The current workflow tests Python application code against PostgreSQL.
+It does not yet build or test the API Docker image.
 
 ## Postman collection
 
-Import this file into Postman:
+Import:
 
 ```text
 postman/flight-api.postman_collection.json
@@ -286,9 +444,9 @@ Set the collection variable:
 base_url = http://127.0.0.1:8000
 ```
 
-The API must be running.
+The API must be running locally or through Docker Compose.
 
-### Request order
+### Execution order
 
 1. Health check
 2. Get existing flight
@@ -298,10 +456,10 @@ The API must be running.
 
 The collection contains 5 requests and 10 assertions.
 
-`Create flight` stores the returned ID in `created_flight_id`.
-`Get created flight` uses that variable to retrieve the newly created flight.
+`Create flight` saves the returned ID in `created_flight_id`.
+`Get created flight` uses that variable to retrieve the new flight.
 
-### Required data for the collection
+### Required data
 
 The existing-flight request expects ID 1 to contain:
 
@@ -314,7 +472,7 @@ The existing-flight request expects ID 1 to contain:
 }
 ```
 
-On a fresh application database, create this flight first through
+On a fresh application database, create the example flight through
 `POST /flights`, without supplying an ID:
 
 ```json
@@ -325,53 +483,84 @@ On a fresh application database, create this flight first through
 }
 ```
 
-Check the returned ID. If it is not 1, update both the URL and the
-expected ID in the `Get existing flight` request.
+Check the returned ID.
+If it is not 1, update the URL and expected ID in
+the `Get existing flight` request.
 
 The nonexistent-flight request assumes ID 999 does not exist.
-A 404 response for that request is expected and should pass its tests.
+Its expected response is 404.
 
 Run `Create flight` before `Get created flight` to populate the ID variable.
 
-Postman requests use the application database and can leave records in it.
+Postman uses the application database and leaves created records in it.
 Repeated collection runs create additional flights.
 
-The collection is run manually. GitHub Actions currently runs pytest,
-not the Postman collection.
+GitHub Actions currently runs pytest, not the Postman collection.
 
 ## Manual testing documentation
 
-- Test cases: `docs/test-cases.md`
-- Manual execution results: `docs/manual-test-results.md`
+- `docs/test-cases.md`
+- `docs/manual-test-results.md`
 
-These documents record the scenarios described in them; they are not
-automatically updated by CI.
+Documented manual checks include:
 
-## Stop the local database
+- Flight creation and retrieval.
+- Rejection of identical airports.
+- Persistence after recreating the API container.
+- Running the API as a non-root user.
+
+These documents are not automatically updated by CI.
+
+## Troubleshooting
+
+### Port 8000 is already in use
+
+A local Uvicorn process may already be listening on that port.
+
+Check:
 
 ```bash
-docker compose stop db
+sudo ss -ltnp 'sport = :8000'
 ```
 
-Restart it with:
+Stop the local Uvicorn process with Ctrl+C in its terminal before starting
+the API container.
+
+### API container does not start or requests return errors
+
+Check service states and logs:
 
 ```bash
-docker compose up -d db
+docker compose ps -a
+docker compose logs --tail=50 api
+docker compose logs --tail=50 db
 ```
 
-Stopping the container does not remove the named volume.
+Verify that:
 
-Changing `POSTGRES_PASSWORD` in `.env` does not change the password
-of an already initialized PostgreSQL user.
+- PostgreSQL is healthy.
+- The application table has been created.
+- The configured database credentials match the initialized database.
+- The API container uses hostname `db`.
+
+### Tests cannot connect to PostgreSQL
+
+Verify that:
+
+- The database container is running.
+- `flight_lab_test` exists and contains the `flights` table.
+- Local `.env` uses `POSTGRES_HOST=127.0.0.1`.
+- Dependencies are installed in the active Python environment.
 
 ## Current limitations
 
 - No authentication or authorization.
 - No duplicate-flight detection.
 - No update, deletion, listing or filtering endpoints.
-- `/health` checks the API response, not database availability.
+- `/health` does not check database readiness.
 - Database schema setup is manual.
 - The development database uses a privileged bootstrap user.
 - No connection pooling.
-- The API is not yet containerized.
+- Automated tests are designed for sequential execution.
+- The Docker image currently installs test dependencies as well as runtime dependencies.
 - This is a learning project, not a production service.

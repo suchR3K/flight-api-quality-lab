@@ -41,3 +41,42 @@ Wynik rzeczywisty:
 - Żądanie zostało odrzucone zgodnie z wymaganiem.
 
 Status: PASS.
+
+
+## MT-003: Trwałość danych po odtworzeniu kontenera API
+
+Środowisko:
+- API i PostgreSQL uruchomione przez Docker Compose.
+
+Kroki:
+1. Utworzono lot przez POST /flights.
+2. Pobrano lot przez GET /flights/{id}.
+3. Odtworzono kontener API poleceniem:
+   docker compose up -d --force-recreate --no-deps api
+4. Ponownie pobrano ten sam lot, bez ponownego wykonywania POST.
+
+Oczekiwany wynik:
+- POST zwraca 201.
+- GET przed odtworzeniem i po odtworzeniu zwraca 200.
+- ID i dane lotu pozostają niezmienione.
+
+Wynik rzeczywisty:
+- POST zwrócił 201.
+- Oba żądania GET zwróciły 200.
+- ID i dane lotu pozostały niezmienione.
+
+Status: PASS.
+
+## MT-004: Użytkownik procesu aplikacji w kontenerze
+
+Kroki:
+1. Wykonano: docker compose exec api id
+
+Oczekiwany wynik:
+- Proces działa jako appuser z UID 10001, nie jako root.
+
+Wynik rzeczywisty:
+- uid=10001(appuser)
+- gid=10001(appuser)
+
+Status: PASS.
