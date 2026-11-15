@@ -1,0 +1,274 @@
+{
+	"info": {
+		"_postman_id": "87f8869a-8652-411b-8b99-41667fcd55a9",
+		"name": "Flight API Quality Lab",
+		"description": "### Welcome to Postman! This is your first collection. \n\nCollections are your starting point for building and testing APIs. You can use this one to:\n\n• Group related requests\n• Test your API in real-world scenarios\n• Document and share your requests\n\nUpdate the name and overview whenever you’re ready to make it yours.\n\n[Learn more about Postman Collections.](https://learning.postman.com/docs/collections/collections-overview/)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "60203260",
+		"_collection_link": "https://suchanskaa-6041090.postman.co/workspace/Julia-Suchanska's-Workspace~4551095d-b894-4606-870e-6fa1b0697d08/collection/60203260-87f8869a-8652-411b-8b99-41667fcd55a9?action=share&source=collection_link&creator=60203260"
+	},
+	"item": [
+		{
+			"name": "Health check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response body contains 'ok'\", function () {",
+							"    const body = pm.response.json();",
+							"    pm.expect(body).to.deep.equal({",
+							"        \"status\": \"ok\"",
+							"    });",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"health"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get existing flight",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response contains the expected flight\", function () {",
+							"    const body = pm.response.json();",
+							"    pm.expect(body).to.deep.equal({",
+							"        id: 1,",
+							"        flight_number: \"LO123\",",
+							"        origin: \"WAW\",",
+							"        destination: \"LHR\"",
+							"    });",
+							"});",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/flights/1",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"flights",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get nonexistent flight",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 404\", function () {",
+							"    pm.response.to.have.status(404);",
+							"});",
+							"",
+							"pm.test(\"Response explains that the flight was not found\", function () {",
+							"    const body = pm.response.json();",
+							"    pm.except(body).to.deep.equal({",
+							"        detail: \"Flight not found\"",
+							"    });",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/flights/999",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"flights",
+						"999"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create flight",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 201\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"",
+							"pm.test(\"Created flight contains correct data\", function () {",
+							"    const body = pm.response.json();",
+							"",
+							"    pm.expect(body.id).to.be.a(\"number\");",
+							"    pm.expect(Number.isInteger(body.id)).to.equal(true);",
+							"    pm.expect(body.id).to.be.above(0);",
+							"",
+							"    pm.expect(body.flight_number).to.equal(\"LO456\");",
+							"    pm.expect(body.origin).to.equal(\"WAW\");",
+							"    pm.expect(body.destination).to.equal(\"CDG\");",
+							"});",
+							"",
+							"if (pm.response.code === 201) {",
+							"    const body = pm.response.json();",
+							"    pm.collectionVariables.set(\"created_flight_id\", body.id);",
+							"}"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"flight_number\": \"   LO456   \",\n    \"origin\": \"WAW\",\n    \"destination\": \"CDG\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/flights",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"flights"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get created flight",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response contains the created flight\", function () {",
+							"    const body = pm.response.json();",
+							"    const expectedId = Number(",
+							"        pm.collectionVariables.get(\"created_flight_id\")",
+							"    );",
+							"",
+							"    pm.expect(body).to.deep.equal({",
+							"        id: expectedId,",
+							"        flight_number: \"LO456\",",
+							"        origin: \"WAW\",",
+							"        destination: \"CDG\"",
+							"    });",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/flights/{{created_flight_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"flights",
+						"{{created_flight_id}}"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "created_flight_id",
+			"value": ""
+		},
+		{
+			"key": "base_url",
+			"value": ""
+		}
+	]
+}
