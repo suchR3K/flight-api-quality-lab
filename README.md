@@ -568,3 +568,12 @@ Verify that:
 - Automated tests are designed for sequential execution.
 - The Docker image currently installs test dependencies as well as runtime dependencies.
 - This is a learning project, not a production service.
+
+
+## Reproducibility verification
+
+[Fresh-clone verification report](docs/fresh-clone-verification.md)
+
+The project was installed and tested from a separate GitHub clone,
+using a new Python environment and a separate PostgreSQL volume.
+All 30 automated cases passed, and basic API operations were verified.
