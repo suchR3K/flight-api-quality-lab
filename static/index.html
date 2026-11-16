@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flight Explorer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, sans-serif;
+      color: #17243b;
+      background: #f3f6fb;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+
+    header {
+      background: #142642;
+      color: white;
+      padding: 36px 24px;
+    }
+
+    header > div, main {
+      max-width: 1200px;
+      margin: auto;
+    }
+
+    h1 { margin: 0 0 10px; font-size: 2.2rem; }
+    header p { color: #d3deef; max-width: 760px; }
+    header a { color: #b9d8ff; }
+    main { padding: 24px; }
+
+    .card {
+      background: white;
+      border: 1px solid #dce3ee;
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 18px #14264208;
+    }
+
+    h2 { margin-top: 0; font-size: 1.2rem; }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    label { display: block; font-size: .9rem; font-weight: 600; }
+
+    input, select, button {
+      font: inherit;
+      border-radius: 8px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 7px;
+      border: 1px solid #aebcd0;
+      background: white;
+      color: #17243b;
+    }
+
+    button {
+      padding: 10px 16px;
+      border: 1px solid #245bca;
+      background: #245bca;
+      color: white;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: white;
+      color: #245bca;
+    }
+
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    :focus-visible {
+      outline: 3px solid #ec9900;
+      outline-offset: 3px;
+    }
+
+    .actions, .pagination {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    .status { min-height: 24px; margin: 16px 0 0; }
+    .error { color: #a31c2f; }
+    .muted { color: #58677d; }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    caption { text-align: left; margin-bottom: 16px; }
+
+    th, td {
+      padding: 13px 12px;
+      border-bottom: 1px solid #e5eaf2;
+      white-space: nowrap;
+    }
+
+    th { background: #f3f6fb; font-size: .85rem; }
+    tbody tr:hover { background: #f8faff; }
+    td button { padding: 6px 12px; }
+
+    dialog {
+      width: min(520px, 92vw);
+      border: none;
+      border-radius: 14px;
+      padding: 28px;
+      color: #17243b;
+    }
+
+    dialog::backdrop { background: #14264299; }
+
+    dl {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    dt { color: #58677d; }
+    dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+    @media (max-width: 800px) {
+      .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 480px) {
+      .filters { grid-template-columns: 1fr; }
+      main { padding: 14px; }
+      .card { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Flight Explorer</h1>
+      <p>
+        Explore historical flight records. The imported BTS dataset covers
+        US domestic flights in June 2025. Demonstration records may also
+        be present. This is not a live timetable or booking service.
+      </p>
+      <a href="/docs" target="_blank" rel="noopener">API documentation</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="card" aria-labelledby="search-title">
+      <h2 id="search-title">Find flights</h2>
+
+      <form id="search-form">
+        <div class="filters">
+          <label>
+            Origin airport
+            <input name="origin" placeholder="JFK" maxlength="3"
+                   pattern="[A-Za-z]{3}" autocomplete="off"
+                   title="Enter a three-letter airport code">
+          </label>
+
+          <label>
+            Destination airport
+            <input name="destination" placeholder="LAX" maxlength="3"
+                   pattern="[A-Za-z]{3}" autocomplete="off"
+                   title="Enter a three-letter airport code">
+          </label>
+
+          <label>
+            Flight date
+            <input name="flight_date" type="date">
+          </label>
+
+          <label>
+            Carrier code
+            <input name="carrier_code" placeholder="AA" maxlength="10"
+                   pattern="[A-Za-z0-9]+(\([0-9]+\))?"
+                   autocomplete="off">
+          </label>
+
+          <label>
+            Sort by
+            <select name="sort_by">
+              <option value="id">Record ID</option>
+              <option value="flight_date">Flight date</option>
+              <option value="carrier_code">Carrier</option>
+              <option value="flight_number">Flight number (text)</option>
+              <option value="origin">Origin</option>
+              <option value="destination">Destination</option>
+            </select>
+          </label>
+
+          <label>
+            Direction
+            <select name="sort_order">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </label>
+
+          <label>
+            Results per page
+            <select name="limit">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="search-button" type="submit">Search flights</button>
+          <button id="reset-button" class="secondary" type="button">
+            Reset filters
+          </button>
+        </div>
+      </form>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card" aria-labelledby="results-title">
+      <h2 id="results-title">Results</h2>
+
+      <div class="table-wrap">
+        <table>
+          <caption id="summary" class="muted">Loading records…</caption>
+          <thead>
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">Date</th>
+              <th scope="col">Carrier</th>
+              <th scope="col">Flight</th>
+              <th scope="col">Origin</th>
+              <th scope="col">Destination</th>
+              <th scope="col">Details</th>
+            </tr>
+          </thead>
+          <tbody id="results"></tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button id="previous" class="secondary" type="button" disabled>
+          Previous
+        </button>
+        <span id="page-label"></span>
+        <button id="next" class="secondary" type="button" disabled>
+          Next
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="details-dialog" aria-labelledby="details-title">
+    <h2 id="details-title">Flight details</h2>
+    <p id="details-status" role="status"></p>
+    <dl id="details-content"></dl>
+    <form method="dialog">
+      <button>Close</button>
+    </form>
+  </dialog>
+
+  <script>
+    const form = document.querySelector("#search-form");
+    const status = document.querySelector("#status");
+    const results = document.querySelector("#results");
+    const summary = document.querySelector("#summary");
+    const previous = document.querySelector("#previous");
+    const next = document.querySelector("#next");
+    const pageLabel = document.querySelector("#page-label");
+    const dialog = document.querySelector("#details-dialog");
+    const detailsStatus = document.querySelector("#details-status");
+    const detailsContent = document.querySelector("#details-content");
+
+    let activeParams = new URLSearchParams();
+    let currentPage = null;
+    let busy = false;
+    let detailRequest = 0;
+
+    function readFilters() {
+      const params = new URLSearchParams();
+
+      for (const [key, rawValue] of new FormData(form)) {
+        let value = String(rawValue).trim();
+
+        if (["origin", "destination", "carrier_code"].includes(key)) {
+          value = value.toUpperCase();
+        }
+
+        if (value !== "") {
+          params.set(key, value);
+        }
+      }
+
+      return params;
+    }
+
+    async function fetchJson(url) {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(20000)
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The server returned an unreadable response.");
+      }
+
+      if (!response.ok) {
+        if (Array.isArray(data.detail)) {
+          throw new Error(
+            data.detail.map(error =>
+              `${error.loc.slice(1).join(".")}: ${error.msg}`
+            ).join("; ")
+          );
+        }
+
+        throw new Error(data.detail || `Request failed (${response.status}).`);
+      }
+
+      return data;
+    }
+
+    function errorMessage(error) {
+      if (error.name === "TimeoutError") {
+        return "The request timed out. Please try again.";
+      }
+
+      if (error instanceof TypeError) {
+        return "Cannot reach the application. Check that it is running.";
+      }
+
+      return error.message || "An unexpected error occurred.";
+    }
+
+    function updateControls() {
+      form.querySelectorAll("input, select, button").forEach(control => {
+        control.disabled = busy;
+      });
+
+      previous.disabled = busy || !currentPage || currentPage.offset === 0;
+      next.disabled = busy || !currentPage ||
+        currentPage.offset + currentPage.limit >= currentPage.total;
+    }
+
+    function addCell(row, value) {
+      const cell = document.createElement("td");
+      cell.textContent = value ?? "—";
+      row.appendChild(cell);
+    }
+
+    function renderPage(page) {
+      results.replaceChildren();
+
+      for (const flight of page.items) {
+        const row = document.createElement("tr");
+
+        for (const field of [
+          "id", "flight_date", "carrier_code",
+          "flight_number", "origin", "destination"
+        ]) {
+          addCell(row, flight[field]);
+        }
+
+        const cell = document.createElement("td");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.textContent = "View";
+        button.setAttribute("aria-label", `View flight record ${flight.id}`);
+        button.addEventListener("click", () => showDetails(flight.id));
+        cell.appendChild(button);
+        row.appendChild(cell);
+        results.appendChild(row);
+      }
+
+      if (page.items.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 7;
+        cell.textContent = "No flights found. Try different filters.";
+        row.appendChild(cell);
+        results.appendChild(row);
+      }
+
+      const start = page.items.length ? page.offset + 1 : 0;
+      const end = page.offset + page.items.length;
+
+      summary.textContent =
+        `${page.total.toLocaleString()} matching records · ` +
+        `Showing ${start.toLocaleString()}–${end.toLocaleString()}`;
+
+      pageLabel.textContent = page.total
+        ? `Page ${Math.floor(page.offset / page.limit) + 1} of ` +
+          `${Math.ceil(page.total / page.limit).toLocaleString()}`
+        : "No results";
+    }
+
+    async function loadPage(offset = 0) {
+      if (busy) return;
+
+      busy = true;
+      currentPage = null;
+      results.replaceChildren();
+      summary.textContent = "Loading records…";
+      pageLabel.textContent = "";
+      status.className = "status";
+      status.textContent = "Searching…";
+      updateControls();
+
+      const params = new URLSearchParams(activeParams);
+      params.set("offset", String(offset));
+
+      try {
+        const page = await fetchJson(`/flights?${params}`);
+        currentPage = page;
+        renderPage(page);
+        status.textContent = page.total
+          ? "Search completed."
+          : "No records match the selected filters.";
+      } catch (error) {
+        status.className = "status error";
+        status.textContent = errorMessage(error);
+        summary.textContent = "Results could not be loaded.";
+      } finally {
+        busy = false;
+        updateControls();
+      }
+    }
+
+    async function showDetails(id) {
+      const requestId = ++detailRequest;
+      detailsContent.replaceChildren();
+      detailsStatus.className = "";
+      detailsStatus.textContent = "Loading details…";
+      if (!dialog.open) dialog.showModal();
+
+      try {
+        const flight = await fetchJson(`/flights/${id}`);
+        if (requestId !== detailRequest || !dialog.open) return;
+
+        detailsStatus.textContent = "";
+        const fields = [
+          ["id", "Record ID"],
+          ["flight_date", "Flight date"],
+          ["carrier_code", "Carrier"],
+          ["flight_number", "Flight number"],
+          ["origin", "Origin"],
+          ["destination", "Destination"]
+        ];
+
+        for (const [field, label] of fields) {
+          const term = document.createElement("dt");
+          const value = document.createElement("dd");
+          term.textContent = label;
+          value.textContent = flight[field] ?? "Not provided";
+          detailsContent.append(term, value);
+        }
+      } catch (error) {
+        if (requestId !== detailRequest || !dialog.open) return;
+        detailsStatus.className = "error";
+        detailsStatus.textContent = errorMessage(error);
+      }
+    }
+
+    dialog.addEventListener("close", () => {
+      detailRequest += 1;
+    });
+
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      activeParams = readFilters();
+      loadPage(0);
+    });
+
+    document.querySelector("#reset-button").addEventListener("click", () => {
+      form.reset();
+      activeParams = readFilters();
+      loadPage(0);
+    });
+
+    previous.addEventListener("click", () => {
+      if (currentPage) {
+        loadPage(Math.max(0, currentPage.offset - currentPage.limit));
+      }
+    });
+
+    next.addEventListener("click", () => {
+      if (currentPage) {
+        loadPage(currentPage.offset + currentPage.limit);
+      }
+    });
+
+    activeParams = readFilters();
+    loadPage(0);
+  </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd --create-home --uid 10001 appuser
 
 COPY main.py database.py ./
+COPY static/ ./static/
 
 USER appuser
 
