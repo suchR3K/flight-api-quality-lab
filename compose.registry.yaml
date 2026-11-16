@@ -1,0 +1,12 @@
+services:
+  migrate:
+    build: !reset null
+    image: ghcr.io/suchr3k/flight-api-quality-lab:${IMAGE_TAG:-latest}
+
+  api:
+    build: !reset null
+    image: ghcr.io/suchr3k/flight-api-quality-lab:${IMAGE_TAG:-latest}
+
+  importer:
+    build: !reset null
+    image: ghcr.io/suchr3k/flight-api-quality-lab:${IMAGE_TAG:-latest}

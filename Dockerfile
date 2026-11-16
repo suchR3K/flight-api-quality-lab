@@ -1,5 +1,8 @@
 FROM python:3.13-slim
 
+LABEL org.opencontainers.image.source="https://github.com/suchR3K/flight-api-quality-lab"
+LABEL org.opencontainers.image.description="Flight Explorer API, web interface and database bootstrap"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
