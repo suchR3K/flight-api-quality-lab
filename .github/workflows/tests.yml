@@ -1,4 +1,4 @@
-name: API tests
+name: API and browser tests
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -44,7 +44,9 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: |
+          python -m pip install -r requirements.txt -r requirements-e2e.txt
+          python -m playwright install --with-deps chromium
 
       - name: Create test database schema
         run: |
@@ -52,28 +54,151 @@ jobs:
           from pathlib import Path
           from database import get_connection
 
-          schema = Path("sql/001_create_flights.sql").read_text(
-              encoding="utf-8"
-          )
+          migration_files = [
+              Path("sql/001_create_flights.sql"),
+              Path("sql/002_add_flight_details.sql"),
+              Path("sql/003_add_flight_unique_index.sql"),
+          ]
+
+          with get_connection("flight_lab_test") as connection:
+              connection.autocommit = True
+              with connection.cursor() as cursor:
+                  for migration_file in migration_files:
+                      print(f"Applying: {migration_file.name}")
+                      cursor.execute(
+                          migration_file.read_text(encoding="utf-8")
+                      )
+          PY
+
+      - name: Run API tests
+        run: |
+          mkdir -p reports
+          python -m pytest tests/ -v --junitxml=reports/api-junit.xml
+
+      - name: Prepare browser test data
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import date
+          from database import get_connection
+
+          if os.environ.get("GITHUB_ACTIONS") != "true":
+              raise RuntimeError("This seed is intended for CI only")
 
           with get_connection("flight_lab_test") as connection:
               with connection.cursor() as cursor:
-                  cursor.execute(schema)
-          PY
+                  cursor.execute("SELECT current_database() AS name")
+                  if cursor.fetchone()["name"] != "flight_lab_test":
+                      raise RuntimeError("Unexpected database")
 
-      - name: Run tests
-        run: |
-          mkdir -p reports
-          python -m pytest -v --junitxml=reports/junit.xml
+                  cursor.execute("TRUNCATE flights RESTART IDENTITY")
+
+                  rows = [
+                      (
+                          str(100 + index),
+                          "JFK",
+                          "LAX",
+                          date(2025, 6, 1),
+                          "AA",
+                      )
+                      for index in range(15)
+                  ]
+
+                  rows.extend([
+                      (
+                          str(200 + index),
+                          "LAX",
+                          "ORD",
+                          date(2025, 6, 2),
+                          "DL",
+                      )
+                      for index in range(10)
+                  ])
+
+                  cursor.executemany(
+                      """
+                      INSERT INTO flights (
+                          flight_number,
+                          origin,
+                          destination,
+                          flight_date,
+                          carrier_code
+                      )
+                      VALUES (%s, %s, %s, %s, %s)
+                      """,
+                      rows,
+                  )
+
+          print("Created 25 browser test records.")
+          PY
 
       - name: Build API image
         run: docker build -t flight-api:ci .
 
-      - name: Upload test report
+      - name: Start API container
+        run: |
+          docker run -d \
+            --name flight-api-ci \
+            --network host \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_DB \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            flight-api:ci
+
+      - name: Wait for API readiness
+        run: |
+          python - <<'PY'
+          import time
+          import urllib.error
+          import urllib.request
+
+          url = "http://127.0.0.1:8000/ready"
+
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen(url, timeout=2) as response:
+                      if response.status == 200:
+                          print("API is ready.")
+                          break
+              except (urllib.error.URLError, TimeoutError):
+                  pass
+
+              time.sleep(1)
+          else:
+              raise SystemExit("API did not become ready.")
+          PY
+
+      - name: Run browser tests
+        run: |
+          python -m pytest e2e/browser_checks.py -v \
+            --browser chromium \
+            --tracing=retain-on-failure \
+            --screenshot=only-on-failure \
+            --output=reports/playwright \
+            --junitxml=reports/browser-junit.xml
+
+      - name: Collect API logs
+        if: always()
+        run: |
+          mkdir -p reports
+          if docker container inspect flight-api-ci > /dev/null 2>&1; then
+            docker logs flight-api-ci > reports/api-container.log 2>&1
+          fi
+
+      - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: pytest-results
-          path: reports/junit.xml
+          name: test-results
+          path: reports/
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Stop API container
+        if: always()
+        run: |
+          if docker container inspect flight-api-ci > /dev/null 2>&1; then
+            docker rm -f flight-api-ci
+          fi

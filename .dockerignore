@@ -10,3 +10,4 @@ reports/
 *.swp
 check_database.py
 check_test_database.py
+data/raw/
