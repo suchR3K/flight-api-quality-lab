@@ -52,28 +52,19 @@ jobs:
           from pathlib import Path
           from database import get_connection
 
-          schema = Path("sql/001_create_flights.sql").read_text(
-              encoding="utf-8"
-          )
+          migration_files = [
+              Path("sql/001_create_flights.sql"),
+              Path("sql/002_add_flight_details.sql"),
+          ]
 
           with get_connection("flight_lab_test") as connection:
+              connection.autocommit = True
+
               with connection.cursor() as cursor:
-                  cursor.execute(schema)
+                  for migration_file in migration_files:
+                      print(f"Applying: {migration_file.name}")
+                      sql = migration_file.read_text(encoding="utf-8")
+                      cursor.execute(sql)
+
+          print("Test database schema is ready.")
           PY
-
-      - name: Run tests
-        run: |
-          mkdir -p reports
-          python -m pytest -v --junitxml=reports/junit.xml
-
-      - name: Build API image
-        run: docker build -t flight-api:ci .
-
-      - name: Upload test report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pytest-results
-          path: reports/junit.xml
-          retention-days: 14
-          if-no-files-found: warn
