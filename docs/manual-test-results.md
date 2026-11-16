@@ -1,82 +1,65 @@
-# Wyniki testów manualnych
+# Manual Test Results
 
-## MT-001: Dodanie i odczyt poprawnego lotu
+These results document checks performed on an earlier version of the project.
+They do not constitute a complete verification of the Flight Explorer release.
 
-Narzędzie: dokumentacja interaktywna /docs.
+## MT-001: Create and Retrieve a Valid Flight
 
-Dane:
-- flight_number: "  LO789  "
-- origin: WAW
-- destination: FRA
+Tool: Interactive API documentation (`/docs`).
 
-Oczekiwany wynik:
-- POST zwraca 201 i numer lotu bez otaczających spacji.
-- GET z otrzymanym ID zwraca 200 i dane utworzonego lotu.
+### Test Data
 
-Wynik rzeczywisty:
-- POST zwrócił 201.
-- Numer lotu został zwrócony jako "LO789", bez otaczających spacji.
-- GET zwrócił 200 i dane zgodne z utworzonym lotem.
+- `flight_number`: `" LO789 "`
+- `origin`: `WAW`
+- `destination`: `FRA`
 
-Status: PASS.
+### Expected Result
 
-## MT-002: Identyczne lotniska
+- POST returns HTTP 201 and trims surrounding whitespace from the flight number.
+- GET using the returned ID responds with HTTP 200 and the created flight data.
 
-Narzędzie: dokumentacja interaktywna /docs.
+### Actual Result
 
-Dane:
-- flight_number: LO999
-- origin: WAW
-- destination: WAW
+- POST returned HTTP 201.
+- The flight number was returned as `"LO789"`, without surrounding whitespace.
+- GET returned HTTP 200 and data matching the created flight.
 
-Oczekiwany wynik:
+**Status: PASS**
+
+## MT-002: Identical Origin and Destination Airports
+
+Tool: Interactive API documentation (`/docs`).
+
+### Test Data
+
+- `flight_number`: `LO999`
+- `origin`: `WAW`
+- `destination`: `WAW`
+
+### Expected Result
+
 - HTTP 422.
-- Komunikat zawiera:
-  "Origin and destination must be different".
+- The response contains: `"Origin and destination must be different"`.
 
-Wynik rzeczywisty:
-- POST zwrócił 422.
-- Odpowiedź zawierała komunikat:
-  "Origin and destination must be different".
-- Żądanie zostało odrzucone zgodnie z wymaganiem.
+### Actual Result
 
-Status: PASS.
+- POST returned HTTP 422.
+- The response contained: `"Origin and destination must be different"`.
+- The request was rejected as required.
 
+**Status: PASS**
 
-## MT-003: Trwałość danych po odtworzeniu kontenera API
+## MT-003: Data Persistence After Recreating the API Container
 
-Środowisko:
-- API i PostgreSQL uruchomione przez Docker Compose.
+### Environment
 
-Kroki:
-1. Utworzono lot przez POST /flights.
-2. Pobrano lot przez GET /flights/{id}.
-3. Odtworzono kontener API poleceniem:
+API and PostgreSQL running through Docker Compose.
+
+### Steps
+
+1. Create a flight using `POST /flights`.
+2. Retrieve the flight using `GET /flights/{id}`.
+3. Recreate the API container:
+
+   ```bash
    docker compose up -d --force-recreate --no-deps api
-4. Ponownie pobrano ten sam lot, bez ponownego wykonywania POST.
-
-Oczekiwany wynik:
-- POST zwraca 201.
-- GET przed odtworzeniem i po odtworzeniu zwraca 200.
-- ID i dane lotu pozostają niezmienione.
-
-Wynik rzeczywisty:
-- POST zwrócił 201.
-- Oba żądania GET zwróciły 200.
-- ID i dane lotu pozostały niezmienione.
-
-Status: PASS.
-
-## MT-004: Użytkownik procesu aplikacji w kontenerze
-
-Kroki:
-1. Wykonano: docker compose exec api id
-
-Oczekiwany wynik:
-- Proces działa jako appuser z UID 10001, nie jako root.
-
-Wynik rzeczywisty:
-- uid=10001(appuser)
-- gid=10001(appuser)
-
-Status: PASS.
