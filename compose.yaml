@@ -1,3 +1,14 @@
+x-app-environment: &app-environment
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+  POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+x-app-image: &app-image
+  build: .
+  image: flight-api:local
+
 services:
   db:
     image: postgres:17
@@ -6,7 +17,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,20 +28,51 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
-    build: .
-    image: flight-api:local
+  migrate:
+    <<: *app-image
     environment:
-      POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "127.0.0.1:8000:8000"
+      <<: *app-environment
+      SEED_DEMO: ${SEED_DEMO:-true}
+    command: ["python", "bootstrap.py"]
     depends_on:
       db:
         condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *app-image
+    environment:
+      <<: *app-environment
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  importer:
+    <<: *app-image
+    profiles: ["tools"]
+    environment:
+      <<: *app-environment
+    volumes:
+      - ./data/raw:/data:ro
+    entrypoint: ["python", "import_bts.py"]
+    command: ["/data/bts_flights_2025_06.csv", "--limit", "1000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
