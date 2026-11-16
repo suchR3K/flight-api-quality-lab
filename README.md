@@ -6,6 +6,20 @@ The application combines a browser interface, a REST API and historical flight r
 
 This is an educational project, not a live flight tracker or booking service.
 
+## Application preview
+
+### Flight search
+
+![Flight search filters](VirtualBox_VM1_16_11_2026_20_16_27.png)
+
+### Search results
+
+![Flight search results](VirtualBox_VM1_16_11_2026_20_16_40.png)
+
+### Flight details
+
+![Flight details](VirtualBox_VM1_16_11_2026_20_16_49.png)
+
 ## Features
 
 - Browse flight records in a web interface.
