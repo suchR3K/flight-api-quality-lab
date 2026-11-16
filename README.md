@@ -1,87 +1,126 @@
 # Flight API Quality Lab
 
-An educational API testing project built with Python, FastAPI and PostgreSQL.
+A flight exploration application and software testing portfolio project built with Python, FastAPI and PostgreSQL.
 
-The project demonstrates input validation, automated integration tests,
-manual testing in Postman, containerization and continuous integration.
+The application combines a browser interface, a REST API and historical flight records imported from the U.S. Bureau of Transportation Statistics (BTS). It demonstrates database integration, input validation, repeatable data imports, API testing, browser automation and continuous integration.
 
-All flight data is fictional. This project is not affiliated with an airline.
+This is an educational project, not a live flight tracker or booking service.
 
 ## Features
 
-- Check whether the API is responding.
-- Retrieve a flight by ID.
-- Create and persist flights in PostgreSQL.
-- Validate required fields and airport codes.
-- Reject blank flight numbers and identical departure/arrival airports.
-- Trim whitespace around flight numbers.
-- Run automated tests against a separate test database.
-- Generate downloadable JUnit XML reports in GitHub Actions.
-- Run the API and database together using Docker Compose.
+- Browse flight records in a web interface.
+- Filter by origin, destination, flight date and carrier.
+- Sort results and navigate between pages.
+- Open individual flight details.
+- Create demonstration records through the API.
+- Validate request data with Pydantic and database constraints.
+- Import historical BTS data from CSV.
+- Skip previously imported records using a unique database index.
+- Check API availability and database readiness.
+- Run API integration tests against a separate PostgreSQL database.
+- Run browser tests with Playwright.
+- Build and test the Docker image in GitHub Actions.
+- Save JUnit reports, application logs and browser failure traces.
 
 ## Technologies
 
-- Python 3.13
-- FastAPI and Pydantic
-- PostgreSQL 17 and Psycopg
-- pytest and FastAPI TestClient
-- Postman
-- Docker and Docker Compose
-- Git and GitHub Actions
+| Area | Technologies |
+|---|---|
+| Backend | Python 3.13, FastAPI, Pydantic |
+| Database | PostgreSQL 17, Psycopg, SQL |
+| Frontend | HTML, CSS, JavaScript |
+| API testing | pytest, FastAPI TestClient |
+| Browser testing | Playwright, pytest-playwright, Chromium |
+| Manual testing | Postman |
+| Containers | Docker, Docker Compose |
+| CI | GitHub Actions |
+| Version control | Git, GitHub |
 
 ## Architecture
 
-### Application
-
 ```text
-Postman / HTTP client
-        |
-        | localhost:8000
-        v
-FastAPI container
-        |
-        | db:5432
-        v
-PostgreSQL container
-        |
-        v
-Named Docker volume
+Browser / Postman / HTTP client
+              |
+              | localhost:8000
+              v
+      FastAPI application
+      + Flight Explorer UI
+              |
+              | db:5432
+              v
+         PostgreSQL
+              |
+              v
+      Persistent Docker volume
 ```
 
-The API can also run directly in a local Python environment while
-PostgreSQL runs in Docker.
+The API and frontend are served by the same application.
 
-### Automated tests
+The CSV importer runs separately and writes records to PostgreSQL.
+The application does not download BTS data automatically.
+
+## Historical dataset
+
+Source: U.S. Bureau of Transportation Statistics,
+[Reporting Carrier On-Time Performance](https://www.transtats.bts.gov/TableInfo.asp?QO_fu146_anzr=b0-gvzr&gnoyr_VQ=FGJ).
+
+The dataset contains historical reports for domestic flights operated by reporting carriers.
+
+The locally verified June 2025 import contained:
+
+| Metric | Result |
+|---|---:|
+| Imported historical records | 611,575 |
+| First flight date | 2025-06-01 |
+| Last flight date | 2025-06-30 |
+| Distinct carrier codes | 14 |
+| Rejected rows in the completed import | 0 |
+
+These figures describe the dataset used during development.
+A fresh installation starts with an empty application database.
+Manually created demonstration records may increase the total row count.
+
+The importer currently stores:
+
+- Flight date
+- Carrier code
+- Flight number
+- Origin airport code
+- Destination airport code
+
+Departure times, delays, cancellations and diversions are not currently
+stored by the importer, even if present in the downloaded CSV.
+
+Raw data is excluded from Git and the Docker build context.
+
+### Duplicate handling
+
+Imported records are identified by:
 
 ```text
-pytest + TestClient
-        |
-        v
-FastAPI with a database dependency override
-        |
-        v
-PostgreSQL: flight_lab_test
+flight_date + carrier_code + flight_number + origin + destination
 ```
 
-- `flight_lab` stores data used by the application and manual tests.
-- `flight_lab_test` is reserved for automated tests.
+A partial unique index applies when both flight date and carrier code are present.
 
-## Requirements
+The importer uses `ON CONFLICT ... DO NOTHING`, allowing the same file
+to be imported again without duplicating matching records.
+
+Demonstration records without a date or carrier are outside this uniqueness rule.
+
+## First-time setup
+
+The following commands are intended for Linux.
+When using VirtualBox, run them inside the Ubuntu VM.
+
+Requirements:
 
 - Git
 - Docker Engine and Docker Compose
-- Python 3.13 with pip and venv support for local pytest execution
-- Postman, optionally, for running the collection
+- Python 3.13 with pip and venv support
+- Internet access for dependencies and optional dataset download
 
-The commands below are intended for Linux.
-
-When using an Ubuntu virtual machine, run these commands inside Ubuntu.
-Run Postman inside the same VM when using the localhost addresses below.
-
-If your Docker installation requires administrator privileges, prefix
-Docker commands with `sudo`.
-
-## First-time setup
+If required by your Docker installation, prefix Docker commands with `sudo`.
 
 ### 1. Clone the repository
 
@@ -92,9 +131,7 @@ cd flight-api-quality-lab
 
 Run subsequent commands from this directory.
 
-### 2. Configure the database
-
-Create a local configuration file:
+### 2. Configure environment variables
 
 ```bash
 cp .env.example .env
@@ -110,429 +147,407 @@ POSTGRES_USER=flight_app
 POSTGRES_PASSWORD=replace_with_your_local_password
 ```
 
-Replace the example password before initializing the database.
+Choose your password before initializing PostgreSQL.
+Do not commit `.env`.
 
-Keep the database name and username shown above to use the commands
-in this guide without modification.
+For an existing installation, keep the working configuration.
+Changing `.env` does not change the password of an existing PostgreSQL user.
 
-Do not commit `.env`. It is excluded by `.gitignore` and `.dockerignore`.
+### 3. Prepare the Python environment
 
-For an existing installation, do not overwrite a working `.env`.
-Changing this file does not change the password of an already initialized
-PostgreSQL user.
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
 
-### 3. Start PostgreSQL
+### 4. Start PostgreSQL
 
 ```bash
 docker compose up -d db
 docker compose ps
 ```
 
-Wait until the database reports `healthy`.
+Wait until PostgreSQL reports `healthy`.
 
-The database is available locally on port 5432.
-Its data is stored in the named volume `postgres_data`, managed by Compose.
+### 5. Initialize the application schema
 
-### 4. Create the application table
+Run these commands once, against a new application database:
 
 ```bash
 docker compose exec -T db psql -U flight_app -d flight_lab -v ON_ERROR_STOP=1 < sql/001_create_flights.sql
+
+docker compose exec -T db psql -U flight_app -d flight_lab -v ON_ERROR_STOP=1 < sql/002_add_flight_details.sql
+
+docker compose exec -T db psql -U flight_app -d flight_lab -v ON_ERROR_STOP=1 < sql/003_add_flight_unique_index.sql
 ```
 
-### 5. Create the test database and table
+The SQL files must run in order.
+There is no automatic migration tracking.
+Do not rerun already applied migrations.
+
+### 6. Initialize the test database
 
 ```bash
-docker compose exec db createdb -U flight_app flight_lab_test
+docker compose exec -T db createdb -U flight_app flight_lab_test
+
 docker compose exec -T db psql -U flight_app -d flight_lab_test -v ON_ERROR_STOP=1 < sql/001_create_flights.sql
+
+docker compose exec -T db psql -U flight_app -d flight_lab_test -v ON_ERROR_STOP=1 < sql/002_add_flight_details.sql
+
+docker compose exec -T db psql -U flight_app -d flight_lab_test -v ON_ERROR_STOP=1 < sql/003_add_flight_unique_index.sql
 ```
 
-Database and table creation should be performed only once per new database.
-Repeated execution reports that the database or table already exists.
+Run this initialization once per new test database.
 
-The application database starts empty.
-Create application data through the API.
+- `flight_lab` contains application and imported data.
+- `flight_lab_test` is reserved for automated tests.
 
-Automated tests prepare their own data in `flight_lab_test`.
-
-## Run with Docker Compose
-
-After completing the database setup:
+### 7. Start the application
 
 ```bash
-docker compose up -d --build
+docker compose up -d --build api
 docker compose ps
 ```
 
-Expected service states:
+Open:
 
-- `db`: running and healthy
-- `api`: running
+- [Flight Explorer](http://127.0.0.1:8000/)
+- [Interactive API documentation](http://127.0.0.1:8000/docs)
+- [API health](http://127.0.0.1:8000/health)
+- [Database readiness](http://127.0.0.1:8000/ready)
 
-The API container waits for the database health check before starting.
-This check does not create the database tables.
+When running in a VM, these addresses refer to services inside that VM.
 
-Available addresses:
+The interface initially shows no records.
+Import the historical dataset or create records through the API.
 
-- Health check: http://127.0.0.1:8000/health
-- Interactive documentation: http://127.0.0.1:8000/docs
+## Import BTS data
 
-Check the response:
+Download a CSV export for June 2025 from the
+[BTS download page](https://www.transtats.bts.gov/DL_SelectFields.aspx?QO_fu146_anzr=&gnoyr_VQ=FGJ).
+
+Include these required columns:
+
+```text
+FL_DATE
+OP_UNIQUE_CARRIER
+OP_CARRIER_FL_NUM
+ORIGIN
+DEST
+```
+
+The current parser expects dates in this format:
+
+```text
+6/1/2025 12:00:00 AM
+```
+
+Save the CSV as:
+
+```text
+data/raw/bts_flights_2025_06.csv
+```
+
+Activate the Python environment and import an initial sample:
 
 ```bash
-curl -i http://127.0.0.1:8000/health
+source .venv/bin/activate
+python import_bts.py data/raw/bts_flights_2025_06.csv --limit 1000
 ```
 
-Expected status: `200 OK`.
+Repeat the command to check duplicate handling.
+Previously imported matching records should be reported as skipped.
 
-Expected body:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-The health endpoint checks the API response, not database availability.
-Use flight creation and retrieval to verify database connectivity.
-
-### Container configuration
-
-- The API runs as `appuser`, with UID 10001.
-- Database settings are passed through environment variables.
-- The local `.env` file is not copied into the API image.
-- The API connects to PostgreSQL using hostname `db`.
-- API and database ports are bound to localhost on the Docker host.
-
-Check the container user:
+Import the complete file:
 
 ```bash
-docker compose exec api id
+python import_bts.py data/raw/bts_flights_2025_06.csv --limit 0
 ```
 
-### View logs
+`--limit 0` means no row limit.
+
+The importer prints the target database and counts of processed,
+inserted, skipped and rejected records.
+
+The import uses the application database configured in `.env`.
+
+## API endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/` | Flight Explorer interface |
+| GET | `/health` | API availability |
+| GET | `/ready` | Database and required flight schema readiness |
+| GET | `/flights` | Filtered, sorted and paginated records |
+| GET | `/flights/{flight_id}` | Individual flight details |
+| POST | `/flights` | Create a flight record |
+
+### Search flights
+
+```bash
+curl "http://127.0.0.1:8000/flights?origin=JFK&destination=LAX&flight_date=2025-06-01&carrier_code=AA&limit=10&offset=0"
+```
+
+Supported query parameters:
+
+| Parameter | Description |
+|---|---|
+| `origin` | Three-letter uppercase origin code |
+| `destination` | Three-letter uppercase destination code |
+| `flight_date` | Date in `YYYY-MM-DD` format |
+| `carrier_code` | Carrier code |
+| `limit` | Page size, from 1 to 100; default 20 |
+| `offset` | Number of records to skip; default 0 |
+| `sort_by` | `id`, `flight_date`, `carrier_code`, `flight_number`, `origin` or `destination` |
+| `sort_order` | `asc` or `desc`; default `asc` |
+
+The response contains `items`, `total`, `limit` and `offset`.
+
+### Create a demonstration record
+
+```bash
+curl -X POST http://127.0.0.1:8000/flights \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flight_number": "DEMO123",
+    "origin": "WAW",
+    "destination": "LHR",
+    "flight_date": "2025-06-15",
+    "carrier_code": "LO"
+  }'
+```
+
+A successful request returns HTTP 201 and the created record.
+The database generates its ID.
+
+Flight date and carrier code are optional.
+Fields with null date or carrier values are omitted from flight responses.
+
+### Validation and errors
+
+- Flight number, origin and destination are required.
+- Flight numbers are trimmed and must not be blank.
+- Airport codes must contain exactly three uppercase ASCII letters.
+- Origin and destination must differ.
+- A supplied carrier code must not be blank.
+- Dates must be valid.
+- Airport codes are checked for format, not against an airport directory.
+- Unknown flight IDs return HTTP 404.
+- Invalid request data returns HTTP 422.
+- Duplicate dated records covered by the unique index return HTTP 409.
+- Database errors handled by the application return HTTP 503.
+
+`/health` does not query PostgreSQL.
+`/ready` checks database connectivity and the required flight columns.
+
+## Automated testing
+
+### API integration tests
+
+```bash
+source .venv/bin/activate
+python -m pytest tests/ -v --junitxml=reports/api-junit.xml
+```
+
+PostgreSQL must be running and `flight_lab_test` must be initialized.
+A running Uvicorn process is not required.
+
+Coverage includes:
+
+- Health responses
+- Flight creation and retrieval
+- Missing records and invalid input
+- Date and carrier validation
+- Filtering and pagination
+- Sorting and stable page ordering
+- Duplicate detection
+- Empty search results
+
+Before each test, the database fixture checks the database name,
+prepares known records and overrides the API database dependency.
+
+The shared transaction is rolled back after the test.
+Tests must not explicitly commit this shared connection.
+
+The fixture is designed for sequential execution.
+Do not run these tests concurrently against the same test database.
+
+### Browser tests
+
+Install the browser testing dependencies:
+
+```bash
+python -m pip install -r requirements-e2e.txt
+python -m playwright install --with-deps chromium
+```
+
+Start the application, then run:
+
+```bash
+python -m pytest e2e/browser_checks.py -v \
+  --browser chromium \
+  --tracing=retain-on-failure \
+  --screenshot=only-on-failure \
+  --output=reports/playwright \
+  --junitxml=reports/browser-junit.xml
+```
+
+Add `--headed` to watch the browser on a desktop Linux installation.
+
+The four browser tests cover:
+
+1. Search filters
+2. Flight details
+3. Empty search results
+4. Pagination
+
+Local browser tests use the running application at
+`http://127.0.0.1:8000` and do not insert or delete records.
+
+They expect:
+- Matching AA flights from JFK to LAX on 2025-06-01.
+- At least 20 records for pagination.
+- No records dated 2000-01-01.
+
+The imported June 2025 dataset satisfies these requirements.
+
+Browser tests are outside `tests/` so they do not inherit its
+database-reset fixture. Run their file explicitly as shown above.
+
+Generated reports and traces are stored under `reports/`.
+
+## Continuous integration
+
+The `API and browser tests` GitHub Actions workflow runs on pushes
+and pull requests.
+
+It:
+
+1. Starts a temporary PostgreSQL database.
+2. Installs Python and browser testing dependencies.
+3. Applies the three schema migrations.
+4. Runs API integration tests.
+5. Prepares 25 deterministic browser test records.
+6. Builds the API Docker image.
+7. Starts a container from that image.
+8. Waits for `/ready` to return HTTP 200.
+9. Runs Chromium browser tests against the container.
+10. Collects application logs and uploads test artifacts.
+11. Removes the API container.
+
+API and browser tests run sequentially.
+
+CI uses prepared test records rather than downloading the full BTS dataset.
+It does not access the developer's local database.
+
+The `test-results` artifact is retained for 14 days and can contain:
+
+- API JUnit XML report
+- Browser JUnit XML report
+- API container logs
+- Browser screenshots and traces when a test fails
+
+A failed test causes the workflow to fail.
+
+## Docker operations
+
+Rebuild the API after changing application or frontend files:
+
+```bash
+docker compose up -d --build api
+```
+
+View logs:
 
 ```bash
 docker compose logs --tail=50 api
 docker compose logs --tail=50 db
 ```
 
-### Rebuild after code changes
-
-```bash
-docker compose up -d --build api
-```
-
-The image contains a copy of the application code.
-Editing local Python files does not automatically update a running container.
-
-### Recreate the API container
-
-```bash
-docker compose up -d --force-recreate --no-deps api
-```
-
-This replaces the API container while leaving the database service alone.
-Previously saved flights remain in PostgreSQL.
-
-### Stop and restart
-
-Stop both services:
+Stop services:
 
 ```bash
 docker compose stop
 ```
 
-Start them again:
+Restart services:
 
 ```bash
 docker compose up -d
 ```
 
-Stopping services does not delete the database volume.
-Do not use `docker compose down -v` unless you intend to delete its data.
+The API runs as a non-root user.
+Application and database ports are bound to localhost.
 
-## Alternative: run the API directly in Python
+Database records persist in the named Docker volume.
+`docker compose down -v` deletes that volume and its data.
 
-This mode uses a local Python process and the database container.
+## Run the API without an API container
 
-Create and activate the environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-Stop the containerized API to free port 8000:
+Keep PostgreSQL running and stop the API container to free port 8000:
 
 ```bash
 docker compose stop api
-```
-
-Start PostgreSQL and the local API:
-
-```bash
 docker compose up -d db
+source .venv/bin/activate
 python -m uvicorn main:app --reload
 ```
 
-Use Ctrl+C to stop the local API.
+The local Python process uses `POSTGRES_HOST=127.0.0.1`.
+Docker Compose overrides this value with `db` for the API container.
 
-The local process uses `POSTGRES_HOST=127.0.0.1` from `.env`.
-The containerized API overrides that setting with `POSTGRES_HOST=db`.
+## Manual testing and project history
 
-Do not run both API variants on port 8000 at the same time.
-
-## API endpoints
-
-| Method | Path | Success response | Expected error responses |
-|---|---|---|---|
-| GET | `/health` | 200 | — |
-| GET | `/flights/{flight_id}` | 200 | 404 for an unknown ID; 422 for an invalid ID format |
-| POST | `/flights` | 201 | 422 for invalid request data |
-
-### Create a flight
-
-Request body for `POST /flights`:
-
-```json
-{
-  "flight_number": "  LO456  ",
-  "origin": "WAW",
-  "destination": "CDG"
-}
-```
-
-Example response:
-
-```json
-{
-  "id": 1,
-  "flight_number": "LO456",
-  "origin": "WAW",
-  "destination": "CDG"
-}
-```
-
-The database generates the ID. Its value may differ.
-IDs are not guaranteed to be consecutive.
-
-### Validation rules
-
-- `flight_number`, `origin` and `destination` are required strings.
-- Leading and trailing whitespace is removed from flight numbers.
-- A blank flight number is rejected.
-- Airport codes must contain exactly three uppercase ASCII letters.
-- Airport codes with surrounding spaces are rejected.
-- Departure and arrival airports must be different.
-
-Airport codes are checked for format, not against a real airport directory.
-
-Database constraints also reject null fields, space-only flight numbers,
-invalid airport code formats and identical airports.
-
-## Run automated tests
-
-Tests run locally through Python and connect to the test database.
-
-If the Python environment has not been created yet:
-
-```bash
-python3 -m venv .venv
-```
-
-Activate it and install dependencies:
-
-```bash
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-Start PostgreSQL and wait until it is healthy:
-
-```bash
-docker compose up -d db
-docker compose ps
-```
-
-Run tests:
-
-```bash
-python -m pytest -v
-```
-
-Uvicorn does not need to be running.
-FastAPI TestClient communicates directly with the application.
-
-The current suite contains 30 test cases, including parameterized cases.
-
-Tests cover:
-
-- Health check response.
-- Retrieval of an existing flight.
-- Unknown flight IDs.
-- Invalid flight ID formats.
-- Flight creation and subsequent retrieval.
-- Missing required fields.
-- Blank flight numbers.
-- Flight number normalization.
-- Invalid airport codes.
-- Identical departure and arrival airports.
-- Connection to the designated test database.
-- Initial database test data.
-
-### Test isolation
-
-Tests use `flight_lab_test`.
-
-Before each test, a fixture:
-
-1. Checks the actual database name.
-2. Clears the flights table and resets its identity generator.
-3. Inserts a known example flight.
-4. Provides the same connection to the test and API dependency override.
-5. Rolls back the transaction after the test.
-
-Tests and endpoints must not explicitly commit the shared test connection,
-because that would prevent the fixture from rolling back those changes.
-
-Application data in `flight_lab` is separate from automated test data.
-The current fixture is designed for sequential test execution.
-
-### JUnit XML report
-
-```bash
-mkdir -p reports
-python -m pytest -v --junitxml=reports/junit.xml
-```
-
-Generated reports are excluded from Git.
-
-## GitHub Actions
-
-The workflow runs on pushes and pull requests.
-
-It:
-
-1. Starts PostgreSQL with a temporary test database.
-2. Checks out the repository.
-3. Sets up Python 3.13.
-4. Installs dependencies.
-5. Creates the test database schema.
-6. Runs pytest and generates a JUnit XML report.
-7. Attempts to upload the report even if tests fail.
-
-The `pytest-results` artifact is retained for 14 days.
-
-A failed test makes the workflow fail.
-Uploading the report does not change that result.
-
-The current workflow tests Python application code against PostgreSQL.
-It does not yet build or test the API Docker image.
-
-## Postman collection
-
-Import:
+The repository includes a Postman collection:
 
 ```text
 postman/flight-api.postman_collection.json
 ```
 
-Set the collection variable:
+Set `base_url` to `http://127.0.0.1:8000`.
 
-```text
-base_url = http://127.0.0.1:8000
-```
+The original collection includes fixed record IDs and baseline assumptions.
+Review those requests and assertions before running it against the imported
+dataset. In particular, an ID previously used as a nonexistent record may
+now exist.
 
-The API must be running locally or through Docker Compose.
+Postman requests that create records modify the application database.
+The collection is not run by the current CI workflow.
 
-### Execution order
+Additional documentation:
 
-1. Health check
-2. Get existing flight
-3. Get nonexistent flight
-4. Create flight
-5. Get created flight
+- [Manual test cases](docs/test-cases.md)
+- [Manual test results](docs/manual-test-results.md)
+- [Port 8000 conflict investigation](docs/troubleshooting/port-8000-conflict.md)
+- [Original fresh-clone verification](docs/fresh-clone-verification.md)
 
-The collection contains 5 requests and 10 assertions.
-
-`Create flight` saves the returned ID in `created_flight_id`.
-`Get created flight` uses that variable to retrieve the new flight.
-
-### Required data
-
-The existing-flight request expects ID 1 to contain:
-
-```json
-{
-  "id": 1,
-  "flight_number": "LO123",
-  "origin": "WAW",
-  "destination": "LHR"
-}
-```
-
-On a fresh application database, create the example flight through
-`POST /flights`, without supplying an ID:
-
-```json
-{
-  "flight_number": "LO123",
-  "origin": "WAW",
-  "destination": "LHR"
-}
-```
-
-Check the returned ID.
-If it is not 1, update the URL and expected ID in
-the `Get existing flight` request.
-
-The nonexistent-flight request assumes ID 999 does not exist.
-Its expected response is 404.
-
-Run `Create flight` before `Get created flight` to populate the ID variable.
-
-Postman uses the application database and leaves created records in it.
-Repeated collection runs create additional flights.
-
-GitHub Actions currently runs pytest, not the Postman collection.
-
-## Manual testing documentation
-
-- `docs/test-cases.md`
-- `docs/manual-test-results.md`
-
-Documented manual checks include:
-
-- Flight creation and retrieval.
-- Rejection of identical airports.
-- Persistence after recreating the API container.
-- Running the API as a non-root user.
-
-These documents are not automatically updated by CI.
+These documents record earlier verification work and are not automatically
+updated by CI. The original fresh-clone report covers the earlier
+30-test version, not the complete Flight Explorer release.
 
 ## Troubleshooting
 
-A documented investigation of a local port conflict is available here:
-
-[API container port conflict](docs/troubleshooting/port-8000-conflict.md)
-
 ### Port 8000 is already in use
 
-A local Uvicorn process may already be listening on that port.
-
-Check:
+Check the listening process:
 
 ```bash
 sudo ss -ltnp 'sport = :8000'
 ```
 
-Stop the local Uvicorn process with Ctrl+C in its terminal before starting
-the API container.
+Stop the local Uvicorn process before starting the API container.
 
-### API container does not start or requests return errors
+### Missing columns or import conflict errors
 
-Check service states and logs:
+Check whether all three migrations have been applied to the intended database.
+
+The importer requires the partial unique index created by migration 003.
+A migration file in the repository does not mean it has been applied.
+
+### API cannot connect to PostgreSQL
+
+Check:
 
 ```bash
 docker compose ps -a
@@ -540,40 +555,27 @@ docker compose logs --tail=50 api
 docker compose logs --tail=50 db
 ```
 
-Verify that:
+Verify the database credentials, schema and connection hostname.
 
-- PostgreSQL is healthy.
-- The application table has been created.
-- The configured database credentials match the initialized database.
-- The API container uses hostname `db`.
+### Browser tests fail on a fresh installation
 
-### Tests cannot connect to PostgreSQL
+The application database starts empty.
+Import the documented dataset before running local browser tests.
 
-Verify that:
-
-- The database container is running.
-- `flight_lab_test` exists and contains the `flights` table.
-- Local `.env` uses `POSTGRES_HOST=127.0.0.1`.
-- Dependencies are installed in the active Python environment.
+Inspect `reports/playwright/` for failure artifacts.
 
 ## Current limitations
 
 - No authentication or authorization.
-- No duplicate-flight detection.
-- No update, deletion, listing or filtering endpoints.
-- `/health` does not check database readiness.
-- Database schema setup is manual.
-- The development database uses a privileged bootstrap user.
+- No booking, live flight status or airline integration.
+- No update or deletion endpoints.
+- No delay, cancellation or departure-time analysis.
+- Database migrations are applied manually.
 - No connection pooling.
-- Automated tests are designed for sequential execution.
-- The Docker image currently installs test dependencies as well as runtime dependencies.
-- This is a learning project, not a production service.
-
-
-## Reproducibility verification
-
-[Fresh-clone verification report](docs/fresh-clone-verification.md)
-
-The project was installed and tested from a separate GitHub clone,
-using a new Python environment and a separate PostgreSQL volume.
-All 30 automated cases passed, and basic API operations were verified.
+- No automated full-dataset download.
+- Imported and manually created records do not have a dedicated provenance field.
+- The development database uses a privileged bootstrap user.
+- The Docker image includes API test dependencies.
+- API tests are designed for sequential execution.
+- No load-testing results or production performance guarantees.
+- This is a learning and portfolio project, not a production service.
