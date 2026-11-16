@@ -903,21 +903,5 @@ Inside the importer container, use:
 /data/bts_flights_2025_06.csv
 ```
 
-## Current Limitations
-
-- No authentication or authorization.
-- No live flight status, booking or airline integration.
-- No update or deletion endpoints.
-- No delay, cancellation or departure-time analysis.
-- No automated BTS dataset download.
-- No dedicated record provenance field.
-- No database connection pooling.
-- Project-specific migration handling rather than a general migration framework.
-- The development database uses a privileged bootstrap user.
-- The application image includes API test dependencies.
-- API tests require sequential execution.
-- Published images currently target Linux AMD64.
-- No load-testing results or production performance guarantees.
-- No public hosting, HTTPS configuration or production deployment setup.
 
 
