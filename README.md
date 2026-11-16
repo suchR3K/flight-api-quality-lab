@@ -6,6 +6,20 @@ The application combines a browser interface, a REST API and historical flight r
 
 This is an educational project, not a live flight tracker or booking service.
 
+## Application preview
+
+### Flight search
+
+![Flight search filters](VirtualBox_VM1_16_11_2026_20_16_27.png)
+
+### Search results
+
+![Flight search results](VirtualBox_VM1_16_11_2026_20_16_40.png)
+
+### Flight details
+
+![Flight details](VirtualBox_VM1_16_11_2026_20_16_49.png)
+
 ## Features
 
 - Browse flight records in a web interface.
@@ -564,18 +578,4 @@ Import the documented dataset before running local browser tests.
 
 Inspect `reports/playwright/` for failure artifacts.
 
-## Current limitations
 
-- No authentication or authorization.
-- No booking, live flight status or airline integration.
-- No update or deletion endpoints.
-- No delay, cancellation or departure-time analysis.
-- Database migrations are applied manually.
-- No connection pooling.
-- No automated full-dataset download.
-- Imported and manually created records do not have a dedicated provenance field.
-- The development database uses a privileged bootstrap user.
-- The Docker image includes API test dependencies.
-- API tests are designed for sequential execution.
-- No load-testing results or production performance guarantees.
-- This is a learning and portfolio project, not a production service.
